@@ -1,0 +1,129 @@
+---
+title: "Olympics notebook"
+author: "Alexandre Facon-Bocquet"
+---
+
+# Load the data
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(plotly)
+```
+
+```{r}
+setwd("/Users/alexandrefacon-bocquet/Documents/olympics")
+olympic_data = read_csv("olympic_medals_tab.csv")
+```
+
+```{r}
+
+olympic_data
+```
+
+# We are cleaning our data
+
+removing the `athlete_url` column
+
+```{r}
+cleaned_olympics = subset(olympic_data, select = -c(athlete_url) )
+cleaned_olympics
+```
+
+completing the NA values of the `athlete_full_name` column
+
+-   checking all NA in the `athlete_full_name`
+
+```{r}
+cleaned_olympics[is.na(cleaned_olympics$athlete_full_name),]
+```
+
+-   we could see that all the NA names are related to a GameTeam participant_type. So we have to put a "Team" tag
+
+```{r}
+cleaned_olympics[is.na(cleaned_olympics$athlete_full_name),"athlete_full_name"] <- "Team Medal"
+cleaned_olympics
+```
+
+We are checking nothing missing in the data set
+
+```{r}
+str(is.na(olympic_data))
+```
+
+Everything's good, we can go further in the analyse
+
+# Visualization
+
+## Medals raking
+
+we could show how many medal each country have. First we count all the medals by countries et medal types.
+
+```{r}
+country_sum <- cleaned_olympics %>%
+  group_by(country_name, medal_type) %>%
+  summarise(
+    n_medal = n()
+  )
+```
+
+Now we can plot the bar graph of the medals repartition.
+
+```{r}
+library(plotly)
+
+top100_countries <- country_sum %>%
+  group_by(country_name) %>%
+  summarize(total_medals = sum(n_medal)) %>%
+  slice_max(order_by = total_medals, n = 100) # 154 pays
+
+g <- ggplot(country_sum %>%
+  filter(country_name %in% top100_countries$country_name),
+  aes(x = reorder(country_name, n_medal), y = n_medal, fill = medal_type)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Top 100 Countries by Total Medals",
+       x = "Country",
+       y = "Total Medals") +
+  theme_minimal()
+
+g <- ggplotly(g) #, dynamicTicks = TRUE)
+g <- g %>% layout(dragmode = "pan", hoverinfo = "n_medal")
+g
+```
+
+## Olympics map
+
+Let's create a map of all Olympics localisations. In a first time we create a data frame where we include localisations et editions' informations. Then we create a map that plot all the localisations assigned with there informations.
+
+```{r}
+olympic_data = read_csv("olympic_medals_tab.csv")
+
+localisation <- olympic_data
+localisation$season = paste(localisation$year, localisation$edition, sep = " ")
+
+localisation <- localisation %>%
+  select(city_host, season, lat, long) %>%
+  filter(!duplicated(season))
+  
+
+library(leaflet)
+library(leaflet.extras)
+
+myIcon <- makeIcon(
+  iconUrl = "Olympics-Logo.png",
+  iconWidth = 50, #iconHeight = 95,
+  iconAnchorX = 15, iconAnchorY = 24,
+)
+
+# Create a base map
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%  
+  #addTiles() %>%
+  addMarkers(lng = localisation$long, 
+             lat = localisation$lat, 
+             popup = paste0("<strong>", localisation$city_host, "</strong><br>","Edition: ", localisation$season),
+             clusterOptions = markerClusterOptions(),
+             icon = myIcon)
+```
